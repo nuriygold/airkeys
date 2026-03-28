@@ -33,6 +33,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 # n8n webhook URL — optional. Set N8N_WEBHOOK_URL env var to enable.
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "").strip()
 
+# CREAO API key — optional. Set CREAO_API_KEY env var to enable CREAO agent apps.
+# CREAO routes through n8n (Path B): AirKeys → n8n → CREAO MCP endpoint.
+CREAO_API_KEY = os.environ.get("CREAO_API_KEY", "").strip()
+
 MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
     '.js':   'application/javascript; charset=utf-8',
@@ -125,22 +129,33 @@ async def get_suggestions(text: str) -> list:
         print(f"[suggestions] {e}")
         return []
 
-# ── n8n Webhook ───────────────────────────────────────────────────────────────
+# ── n8n / CREAO Webhook ───────────────────────────────────────────────────────
 SLASH_COMMANDS = {
     "/summarize": "summarize",
     "/translate": "translate",
     "/n8n":       "default",
 }
 
+# CREAO agent app commands — route through n8n → CREAO MCP endpoint (Path B).
+# n8n receives the action name + creao_api_key and dispatches to CREAO.
+CREAO_COMMANDS = {
+    "/rewrite-professional": "rewrite-professional",
+    "/summarize-notes":      "summarize-notes",
+    "/meeting-followup":     "meeting-followup",
+    "/clean-dictation":      "clean-dictation",
+    "/draft-reply":          "draft-reply",
+    "/creao":                "creao",
+}
+
 def parse_slash_command(text: str):
-    """Return (action, payload) if text is a slash command, else None."""
-    for cmd, action in SLASH_COMMANDS.items():
+    """Return (action, payload, is_creao) if text is a slash command, else None."""
+    for cmd, action in {**SLASH_COMMANDS, **CREAO_COMMANDS}.items():
         if text.startswith(cmd + " ") or text == cmd:
             payload = text[len(cmd):].strip()
-            return action, payload
+            return action, payload, cmd in CREAO_COMMANDS
     return None
 
-async def call_n8n(text: str, action: str) -> str:
+async def call_n8n(text: str, action: str, extra: dict = None) -> str:
     """POST to the n8n webhook and return the response text."""
     if not N8N_WEBHOOK_URL:
         return "n8n not configured — set N8N_WEBHOOK_URL env var"
@@ -148,12 +163,14 @@ async def call_n8n(text: str, action: str) -> str:
         return "aiohttp not installed — run: pip install aiohttp"
 
     payload = {"text": text, "action": action}
+    if extra:
+        payload.update(extra)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 N8N_WEBHOOK_URL,
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=30),
+                timeout=aiohttp.ClientTimeout(total=60),
             ) as resp:
                 if resp.content_type and "json" in resp.content_type:
                     data = await resp.json()
@@ -167,10 +184,10 @@ async def call_n8n(text: str, action: str) -> str:
                 else:
                     return (await resp.text()).strip()
     except asyncio.TimeoutError:
-        return "n8n request timed out (30s)"
+        return "request timed out (60s)"
     except Exception as e:
         print(f"[n8n] {e}")
-        return f"n8n error: {e}"
+        return f"webhook error: {e}"
 
 # ── HTTP static file handler ──────────────────────────────────────────────────
 def serve_static(path: str) -> Response:
@@ -219,20 +236,26 @@ async def ws_handler(websocket):
                 mtype = msg.get("type")
 
                 if mtype in ("key", "special", "text", "combo"):
-                    # Check for n8n slash commands on "text" messages
+                    # Check for slash commands (n8n or CREAO) on "text" messages
                     if mtype == "text":
                         parsed = parse_slash_command(msg.get("value", ""))
                         if parsed:
-                            action, payload = parsed
-                            # Notify iPad that the workflow is running
+                            action, payload, is_creao = parsed
+                            status_type   = "creao_status"   if is_creao else "n8n_status"
+                            response_type = "creao_response" if is_creao else "n8n_response"
+                            label         = "CREAO"          if is_creao else "n8n"
+                            # Notify iPad that the agent is running
                             await websocket.send(json.dumps({
-                                "type": "n8n_status",
-                                "text": f"n8n workflow triggered ({action})…",
+                                "type": status_type,
+                                "text": f"{label} agent running ({action})…",
                             }))
-                            response_text = await call_n8n(payload, action)
+                            extra = {}
+                            if is_creao and CREAO_API_KEY:
+                                extra["creao_api_key"] = CREAO_API_KEY
+                            response_text = await call_n8n(payload, action, extra=extra)
                             # Send response back to iPad
                             await websocket.send(json.dumps({
-                                "type": "n8n_response",
+                                "type": response_type,
                                 "text": response_text,
                             }))
                             # Type the response on the Mac
@@ -285,8 +308,10 @@ async def main():
     print(f"  Port      : {PORT}  (HTTP + WebSocket on same port)")
     ai_status = "✓ enabled (Claude Haiku)" if ANTHROPIC_API_KEY else "✗ disabled (no API key)"
     print(f"  AI mode   : {ai_status}")
-    n8n_status = f"✓ enabled ({N8N_WEBHOOK_URL[:40]}…)" if N8N_WEBHOOK_URL else "✗ disabled (no N8N_WEBHOOK_URL)"
+    n8n_status   = f"✓ enabled ({N8N_WEBHOOK_URL[:40]}…)" if N8N_WEBHOOK_URL else "✗ disabled (no N8N_WEBHOOK_URL)"
+    creao_status = f"✓ enabled (key: {CREAO_API_KEY[:8]}…)" if CREAO_API_KEY else "✗ disabled (no CREAO_API_KEY)"
     print(f"  n8n       : {n8n_status}")
+    print(f"  CREAO     : {creao_status}")
     print("═" * 52)
     print("\n  Local QR (same-network access):\n")
     print_qr(local_url)

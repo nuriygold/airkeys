@@ -1,0 +1,136 @@
+{
+  "name": "AirKeys — CREAO Agent Apps",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "airkeys",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "airkeys-creao-webhook",
+      "notes": "Receives POST from AirKeys server.py. Body: { text, action, creao_api_key? }\nPath B: AirKeys → n8n → CREAO MCP endpoint.\nSet N8N_WEBHOOK_URL in server.py to this webhook's URL."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-prompt",
+              "name": "prompt",
+              "value": "={{ $json.body.action === 'rewrite-professional' ? 'Rewrite the following text in a polished, professional tone suitable for business communication. Preserve the meaning exactly. Output only the rewritten text, nothing else:\\n\\n' + $json.body.text : $json.body.action === 'summarize-notes' ? 'Summarize the following notes into clear, concise bullet points. Focus on key takeaways and action items. Output only the bullet points:\\n\\n' + $json.body.text : $json.body.action === 'meeting-followup' ? 'Write a professional meeting follow-up email based on these notes. Include: a brief summary, key decisions made, action items with owners (if mentioned), and next steps. Keep it concise:\\n\\n' + $json.body.text : $json.body.action === 'clean-dictation' ? 'Clean up the following dictated speech: fix grammar, punctuation, capitalization, and remove filler words. Keep the meaning and voice intact. Output only the cleaned text:\\n\\n' + $json.body.text : $json.body.action === 'draft-reply' ? 'Draft a professional, concise reply to the following message. Match the tone of the original. Output only the reply text:\\n\\n' + $json.body.text : 'You are a CREAO agent app. Process the following text and return a helpful, well-formatted response:\\n\\n' + $json.body.text }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-action",
+              "name": "action",
+              "value": "={{ $json.body.action }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-creao-key",
+              "name": "creao_api_key",
+              "value": "={{ $json.body.creao_api_key || '' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300],
+      "notes": "Routes each CREAO action to the right system prompt.\nActions: rewrite-professional, summarize-notes, meeting-followup, clean-dictation, draft-reply, creao (generic).\n\nTO INTEGRATE CREAO DIRECTLY:\n  When creao_api_key is present, replace the AI node below with an HTTP Request\n  node that calls your CREAO Agent App MCP endpoint:\n    URL: https://app.creao.ai/mcp/<your-app-id>\n    Method: POST\n    Auth: Bearer {{ $json.creao_api_key }}\n    Body: { \"messages\": [{ \"role\": \"user\", \"content\": {{ $json.prompt }} }] }"
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "openai-creao",
+      "name": "AI — CREAO Agent",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "notes": "Fallback AI node — runs when CREAO_API_KEY is not set or CREAO MCP is not configured.\nReplace with an HTTP Request node pointing to your CREAO Agent App MCP endpoint\nonce you have a CREAO account and agent apps set up."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('AI — CREAO Agent').item.json.message.content }) }}",
+        "options": {}
+      },
+      "id": "respond-creao",
+      "name": "Respond — CREAO",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Build Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [{ "node": "AI — CREAO Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI — CREAO Agent": {
+      "main": [
+        [{ "node": "Respond — CREAO", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["airkeys", "creao"],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-28T00:00:00.000Z",
+  "versionId": "1",
+  "_readme": {
+    "title": "AirKeys CREAO Workflow (Path B)",
+    "description": "Routes CREAO slash commands from AirKeys through n8n to CREAO Agent Apps.",
+    "setup": [
+      "1. Import this workflow into n8n",
+      "2. Activate the workflow and copy the webhook URL",
+      "3. Set N8N_WEBHOOK_URL=<webhook-url> when starting server.py",
+      "4. Optionally set CREAO_API_KEY=<your-key> — it will be forwarded in the payload",
+      "5. To use CREAO directly: replace the 'AI — CREAO Agent' node with an HTTP Request node pointing to your CREAO Agent App MCP endpoint (see node notes)"
+    ],
+    "slash_commands": {
+      "/rewrite-professional <text>": "Rewrite text in a professional tone",
+      "/summarize-notes <text>": "Summarize notes into bullet points",
+      "/meeting-followup <text>": "Generate a meeting follow-up email",
+      "/clean-dictation <text>": "Clean up dictated speech",
+      "/draft-reply <text>": "Draft a reply to a message",
+      "/creao <text>": "Generic CREAO agent processing"
+    },
+    "creao_integration": {
+      "note": "CREAO does not currently have a public REST API. Agent Apps are exposed as MCP servers.",
+      "mcp_path": "GET your Agent App's MCP endpoint URL from app.creao.ai > Agent App > Settings > MCP",
+      "http_request_node": {
+        "url": "https://app.creao.ai/mcp/<your-app-id>",
+        "method": "POST",
+        "auth_header": "Authorization: Bearer {{ $json.creao_api_key }}",
+        "body": "{ \"messages\": [{ \"role\": \"user\", \"content\": \"{{ $json.prompt }}\" }] }"
+      }
+    }
+  }
+}
