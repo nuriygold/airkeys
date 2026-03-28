@@ -1,0 +1,276 @@
+{
+  "name": "AirKeys → CREAO Agent App",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "airkeys",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "airkeys-creao-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond-rewrite",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "rewrite-professional",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "cond-summarize-notes",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "summarize-notes",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "switch-action",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-rewrite-input",
+              "name": "input",
+              "value": "={{ $('Webhook').item.json.body.text }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-rewrite-action",
+              "name": "action",
+              "value": "rewrite-professional",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prep-rewrite",
+      "name": "Prep — Rewrite",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 160]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-summarize-input",
+              "name": "input",
+              "value": "={{ $('Webhook').item.json.body.text }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-summarize-action",
+              "name": "action",
+              "value": "summarize-notes",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prep-summarize",
+      "name": "Prep — Summarize Notes",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-default-input",
+              "name": "input",
+              "value": "={{ $('Webhook').item.json.body.text }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-default-action",
+              "name": "action",
+              "value": "default",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prep-default",
+      "name": "Prep — Default",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CREAO_WEBHOOK_URL }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "input",  "value": "={{ $json.input }}" },
+            { "name": "action", "value": "={{ $json.action }}" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "creao-rewrite",
+      "name": "CREAO — Rewrite Professional",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 160],
+      "notes": "POST to your CREAO agent app webhook.\nSet CREAO_WEBHOOK_URL env var in n8n.\nAdd CREAO API key as HTTP Bearer credential."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CREAO_WEBHOOK_URL }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "input",  "value": "={{ $json.input }}" },
+            { "name": "action", "value": "={{ $json.action }}" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "creao-summarize",
+      "name": "CREAO — Summarize Notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "notes": "POST to your CREAO agent app webhook.\nSet CREAO_WEBHOOK_URL env var in n8n.\nAdd CREAO API key as HTTP Bearer credential."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CREAO_WEBHOOK_URL }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "input",  "value": "={{ $json.input }}" },
+            { "name": "action", "value": "={{ $json.action }}" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "creao-default",
+      "name": "CREAO — Default",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 440]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $json.text || $json.output || $json.result || $json.message || JSON.stringify($json) }) }}",
+        "options": {}
+      },
+      "id": "respond-rewrite",
+      "name": "Respond — Rewrite",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $json.text || $json.output || $json.result || $json.message || JSON.stringify($json) }) }}",
+        "options": {}
+      },
+      "id": "respond-summarize",
+      "name": "Respond — Summarize",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $json.text || $json.output || $json.result || $json.message || JSON.stringify($json) }) }}",
+        "options": {}
+      },
+      "id": "respond-default",
+      "name": "Respond — Default",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 440]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Route by Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Prep — Rewrite",         "type": "main", "index": 0 }],
+        [{ "node": "Prep — Summarize Notes",  "type": "main", "index": 0 }],
+        [{ "node": "Prep — Default",          "type": "main", "index": 0 }]
+      ]
+    },
+    "Prep — Rewrite": {
+      "main": [[{ "node": "CREAO — Rewrite Professional", "type": "main", "index": 0 }]]
+    },
+    "Prep — Summarize Notes": {
+      "main": [[{ "node": "CREAO — Summarize Notes", "type": "main", "index": 0 }]]
+    },
+    "Prep — Default": {
+      "main": [[{ "node": "CREAO — Default", "type": "main", "index": 0 }]]
+    },
+    "CREAO — Rewrite Professional": {
+      "main": [[{ "node": "Respond — Rewrite", "type": "main", "index": 0 }]]
+    },
+    "CREAO — Summarize Notes": {
+      "main": [[{ "node": "Respond — Summarize", "type": "main", "index": 0 }]]
+    },
+    "CREAO — Default": {
+      "main": [[{ "node": "Respond — Default", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["airkeys", "creao"],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-28T00:00:00.000Z",
+  "versionId": "1",
+  "_readme": {
+    "architecture": "Path B — AirKeys → n8n (middleware) → CREAO (intelligence layer)",
+    "setup": [
+      "1. Import this workflow into n8n",
+      "2. Set CREAO_WEBHOOK_URL env var in n8n (Settings → Environment Variables)",
+      "3. Create an HTTP Bearer credential in n8n with your CREAO_API_KEY",
+      "4. Assign that credential to all three CREAO HTTP Request nodes",
+      "5. Set N8N_WEBHOOK_URL in AirKeys to point to this workflow's webhook URL",
+      "6. Use slash commands in AirKeys: /rewrite-professional <text>  or  /summarize-notes <text>"
+    ],
+    "payload_sent_to_creao": {
+      "input": "<the text from AirKeys>",
+      "action": "rewrite-professional | summarize-notes | default"
+    },
+    "response_parsed": "text | output | result | message field from CREAO JSON response"
+  }
+}

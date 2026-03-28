@@ -204,6 +204,27 @@
     margin-bottom: 4px;
   }
 
+  /* ── CREAO response panel ── */
+  #creao-response {
+    background: #110d1a;
+    border: 1px solid #2a1a3a;
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #bf5fff;
+    display: none;
+    word-break: break-word;
+    animation: fadeSlideIn 0.25s ease;
+  }
+  #creao-response.visible { display: block; }
+  #creao-label {
+    font-size: 10px;
+    color: #7b3aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
   /* ── Toast ── */
   #toast {
     position: fixed;
@@ -245,6 +266,7 @@
 
   <div id="suggestions"></div>
   <div id="n8n-response"><div id="n8n-label">⚡ n8n response</div><span id="n8n-text"></span></div>
+  <div id="creao-response"><div id="creao-label">🤖 CREAO agent</div><span id="creao-text"></span></div>
   <div id="preview"><span id="preview-text"></span></div>
 
   <div id="keyboard">
@@ -267,6 +289,7 @@
     <div class="tab-btn" onclick="showLayer('fn')" id="tab-fn">F1-12</div>
     <div class="tab-btn" onclick="clearPreview()" id="tab-clear">Clear</div>
     <div class="tab-btn" onclick="sendN8n()" id="tab-n8n" style="color:#30d158;border-color:#1a3a2a;">⚡n8n</div>
+    <div class="tab-btn" onclick="sendCreao()" id="tab-creao" style="color:#bf5fff;border-color:#2a1a3a;">🤖CREAO</div>
   </div>
 </div>
 <div id="toast"></div>
@@ -296,6 +319,8 @@ function connect() {
     if (msg.type === 'suggestions') showSuggestions(msg.items || []);
     else if (msg.type === 'n8n_status') showToast(msg.text || 'n8n workflow triggered…');
     else if (msg.type === 'n8n_response') showN8nResponse(msg.text || '');
+    else if (msg.type === 'creao_status') showToast(msg.text || 'CREAO agent running…');
+    else if (msg.type === 'creao_response') showCreaoResponse(msg.text || '');
   };
 }
 connect();
@@ -325,6 +350,7 @@ function clearPreview() {
   updatePreview();
   clearSuggestions();
   document.getElementById('n8n-response').classList.remove('visible');
+  document.getElementById('creao-response').classList.remove('visible');
 }
 
 // ── Suggestions ──────────────────────────────────────────────────────────────
@@ -525,6 +551,33 @@ function sendN8n() {
     updatePreview();
   } else {
     showToast('Type text, then tap ⚡n8n  —  or use /summarize /translate');
+  }
+}
+
+// ── CREAO ─────────────────────────────────────────────────────────────────────
+function showCreaoResponse(text) {
+  const panel = document.getElementById('creao-response');
+  const span  = document.getElementById('creao-text');
+  span.textContent = text;
+  panel.classList.add('visible');
+  buffer = text;
+  updatePreview();
+}
+
+function sendCreao() {
+  const text = buffer.trim();
+  const creaoCommands = ['/creao ', '/rewrite-professional ', '/summarize-notes '];
+  if (creaoCommands.some(c => text.startsWith(c))) {
+    send({ type: 'text', value: text });
+    buffer = '';
+    updatePreview();
+  } else if (text) {
+    // Wrap plain text in /creao
+    send({ type: 'text', value: '/creao ' + text });
+    buffer = '';
+    updatePreview();
+  } else {
+    showToast('Type text, then tap 🤖CREAO  —  or use /rewrite-professional /summarize-notes');
   }
 }
 
