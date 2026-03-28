@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AirKeys</title>
+<script src="ws_config.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  :root {
+    --bg: #0D0D0D;
+    --surface: #1A1A1A;
+    --border: #2A2A2A;
+    --accent: #00D4FF;
+    --accent2: #7B61FF;
+    --text: #FFFFFF;
+    --text-dim: #888;
+    --key-bg: #242424;
+    --key-mod: #1E2A33;
+    --key-action: #1A1A2E;
+    --key-press: #00D4FF22;
+    --radius: 8px;
+    --gap: 5px;
+  }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    height: 100%;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 8px;
+    gap: 6px;
+  }
+
+  /* ── Header ── */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+  }
+  #logo {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ff3b30;
+    transition: background 0.3s;
+  }
+  #status-dot.connected { background: #30d158; }
+
+  /* ── Suggestion chips ── */
+  #suggestions {
+    display: flex;
+    gap: 6px;
+    padding: 0 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    min-height: 34px;
+  }
+  #suggestions::-webkit-scrollbar { display: none; }
+  .chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 5px 14px;
+    font-size: 13px;
+    color: var(--accent);
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .chip:active { background: var(--key-press); }
+
+  /* ── Text preview ── */
+  #preview {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--text-dim);
+    min-height: 36px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #preview span { color: var(--text); }
+
+  /* ── Keyboard ── */
+  #keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    flex: 1;
+  }
+  .row {
+    display: flex;
+    gap: var(--gap);
+    justify-content: center;
+    flex: 1;
+  }
+  .key {
+    background: var(--key-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.08s, transform 0.08s;
+    position: relative;
+    overflow: hidden;
+  }
+  .key:active, .key.pressed {
+    background: var(--key-press);
+    transform: scale(0.94);
+  }
+  .key.mod {
+    background: var(--key-mod);
+    font-size: 11px;
+    color: var(--accent);
+    flex: 1.4;
+  }
+  .key.mod.active {
+    background: var(--accent);
+    color: #000;
+  }
+  .key.action {
+    background: var(--key-action);
+    color: var(--accent);
+    font-size: 12px;
+  }
+  .key.space {
+    flex: 5;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .key.wide { flex: 2; }
+  .key.return-key { flex: 2; background: #1A2E1A; color: #30d158; }
+  .key.backspace { background: #2E1A1A; color: #ff453a; }
+  .key.mic { background: linear-gradient(135deg, #1A1A2E, #2E1A2E); }
+  .key.mic.active { background: #30d158; color: #000; font-weight: 600; }
+  .key sub { font-size: 8px; position: absolute; bottom: 3px; right: 4px; color: var(--text-dim); }
+
+  /* ── Bottom bar ── */
+  #bottombar {
+    display: flex;
+    gap: var(--gap);
+  }
+  .tab-btn {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .tab-btn.active { color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="logo">⌘ AirKeys</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="status-text" style="font-size:11px;color:var(--text-dim)">Connecting…</span>
+      <div id="status-dot"></div>
+    </div>
+  </div>
+
+  <div id="suggestions"></div>
+  <div id="preview"><span id="preview-text"></span></div>
+
+  <div id="keyboard">
+    <!-- Row 1: numbers -->
+    <div class="row" id="row-num"></div>
+    <!-- Row 2: QWERTY -->
+    <div class="row" id="row-q"></div>
+    <!-- Row 3: ASDF -->
+    <div class="row" id="row-a"></div>
+    <!-- Row 4: ZXCV + modifiers -->
+    <div class="row" id="row-z"></div>
+    <!-- Row 5: spacebar row -->
+    <div class="row" id="row-space"></div>
+    <!-- Row 6: F-keys + arrows -->
+    <div class="row" id="row-fn" style="display:none"></div>
+  </div>
+
+  <div id="bottombar">
+    <div class="tab-btn active" onclick="showLayer('main')" id="tab-main">ABC</div>
+    <div class="tab-btn" onclick="showLayer('fn')" id="tab-fn">F1-12</div>
+    <div class="tab-btn" onclick="clearPreview()" id="tab-clear">Clear</div>
+  </div>
+</div>
+
+<script>
+// ── WebSocket ────────────────────────────────────────────────────────────────
+const WS_URL = window.AIRKEYS_WS || 'ws://localhost:8765';
+let ws, wsReady = false;
+let reconnectTimer = null;
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    wsReady = true;
+    document.getElementById('status-dot').classList.add('connected');
+    document.getElementById('status-text').textContent = 'Connected';
+  };
+  ws.onclose = () => {
+    wsReady = false;
+    document.getElementById('status-dot').classList.remove('connected');
+    document.getElementById('status-text').textContent = 'Reconnecting…';
+    reconnectTimer = setTimeout(connect, 2000);
+  };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'suggestions') showSuggestions(msg.items || []);
+  };
+}
+connect();
+
+function send(msg) {
+  if (wsReady) ws.send(JSON.stringify(msg));
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let buffer = '';
+let modifiers = { shift: false, cmd: false, ctrl: false, alt: false };
+let capsLock = false;
+let micActive = false;
+let recognition = null;
+let suggestTimer = null;
+
+// ── Preview / buffer ─────────────────────────────────────────────────────────
+function updatePreview() {
+  document.getElementById('preview-text').textContent = buffer.slice(-60);
+  clearTimeout(suggestTimer);
+  if (buffer.trim().length > 2) {
+    suggestTimer = setTimeout(() => send({ type: 'suggest', text: buffer }), 600);
+  }
+}
+function clearPreview() { buffer = ''; updatePreview(); clearSuggestions(); }
+
+// ── Suggestions ──────────────────────────────────────────────────────────────
+function showSuggestions(items) {
+  const el = document.getElementById('suggestions');
+  el.innerHTML = items.map(s =>
+    `<div class="chip" onclick="insertSuggestion('${s.replace(/'/g,"&#39;")}')">${s}</div>`
+  ).join('');
+}
+function clearSuggestions() { document.getElementById('suggestions').innerHTML = ''; }
+function insertSuggestion(text) {
+  buffer += ' ' + text;
+  updatePreview();
+  send({ type: 'text', value: ' ' + text });
+}
+
+// ── Key press ────────────────────────────────────────────────────────────────
+function pressKey(value, type = 'key') {
+  // Apply modifiers
+  const mods = Object.entries(modifiers).filter(([,v]) => v).map(([k]) => k);
+
+  if (type === 'key' && mods.length === 0) {
+    const ch = (modifiers.shift || capsLock) ? value.toUpperCase() : value;
+    buffer += ch;
+    updatePreview();
+    send({ type: 'key', value: ch });
+    if (modifiers.shift) setMod('shift', false);
+  } else if (type === 'special') {
+    if (value === 'backspace') {
+      buffer = buffer.slice(0, -1);
+      updatePreview();
+    } else if (value === 'space') {
+      buffer += ' ';
+      updatePreview();
+    } else if (value === 'return') {
+      buffer = '';
+      clearSuggestions();
+    }
+    send({ type: 'special', value });
+  } else if (mods.length > 0 && type === 'key') {
+    send({ type: 'combo', keys: [...mods, value] });
+    // reset one-shot mods
+    if (modifiers.shift) setMod('shift', false);
+    if (modifiers.cmd) setMod('cmd', false);
+    if (modifiers.ctrl) setMod('ctrl', false);
+    if (modifiers.alt) setMod('alt', false);
+  } else {
+    send({ type, value });
+  }
+}
+
+function setMod(mod, val) {
+  modifiers[mod] = val;
+  const btn = document.querySelector(`.key[data-mod="${mod}"]`);
+  if (btn) btn.classList.toggle('active', val);
+}
+function toggleMod(mod) { setMod(mod, !modifiers[mod]); }
+
+// ── Mic / Voice ──────────────────────────────────────────────────────────────
+function toggleMic() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert('Voice input not supported in this browser.');
+    return;
+  }
+  const micBtn = document.getElementById('mic-btn');
+  if (micActive) {
+    recognition && recognition.stop();
+    micActive = false;
+    micBtn.classList.remove('active');
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    buffer += text;
+    updatePreview();
+    send({ type: 'text', value: text });
+  };
+  recognition.onend = () => {
+    micActive = false;
+    micBtn.classList.remove('active');
+  };
+  recognition.start();
+  micActive = true;
+  micBtn.classList.add('active');
+}
+
+// ── Keyboard layout ──────────────────────────────────────────────────────────
+function makeKey(label, opts = {}) {
+  const div = document.createElement('div');
+  div.className = 'key' + (opts.cls ? ' ' + opts.cls : '');
+  div.innerHTML = label;
+  if (opts.sub) div.innerHTML += `<sub>${opts.sub}</sub>`;
+  if (opts.id) div.id = opts.id;
+  if (opts.mod) div.dataset.mod = opts.mod;
+
+  div.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    div.classList.add('pressed');
+    if (opts.onpress) opts.onpress();
+  }, { passive: false });
+  div.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    div.classList.remove('pressed');
+  }, { passive: false });
+  div.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (opts.onpress) opts.onpress();
+  });
+  return div;
+}
+
+function buildKeyboard() {
+  const nums = ['1','2','3','4','5','6','7','8','9','0','-','='];
+  const q    = ['q','w','e','r','t','y','u','i','o','p'];
+  const a    = ['a','s','d','f','g','h','j','k','l',';',"'"];
+  const z    = ['z','x','c','v','b','n','m',',','.'];
+
+  const rowNum = document.getElementById('row-num');
+  const rowQ   = document.getElementById('row-q');
+  const rowA   = document.getElementById('row-a');
+  const rowZ   = document.getElementById('row-z');
+  const rowSp  = document.getElementById('row-space');
+  const rowFn  = document.getElementById('row-fn');
+
+  nums.forEach(c => rowNum.appendChild(makeKey(c, { onpress: () => pressKey(c) })));
+  rowNum.appendChild(makeKey('⌫', { cls: 'backspace', onpress: () => pressKey('backspace','special') }));
+
+  q.forEach(c => rowQ.appendChild(makeKey(c, { onpress: () => pressKey(c) })));
+  rowQ.appendChild(makeKey('↵', { cls: 'return-key wide', onpress: () => pressKey('return','special') }));
+
+  a.forEach(c => rowA.appendChild(makeKey(c, { onpress: () => pressKey(c) })));
+
+  // Row Z — shift + letters + shift
+  rowZ.appendChild(makeKey('⇧', { cls: 'mod', mod: 'shift', onpress: () => toggleMod('shift') }));
+  z.forEach(c => rowZ.appendChild(makeKey(c, { onpress: () => pressKey(c) })));
+  rowZ.appendChild(makeKey('⇧', { cls: 'mod', mod: 'shift', onpress: () => toggleMod('shift') }));
+
+  // Spacebar row
+  rowSp.appendChild(makeKey('⌘', { cls: 'mod', mod: 'cmd', onpress: () => toggleMod('cmd') }));
+  rowSp.appendChild(makeKey('⌃', { cls: 'mod', mod: 'ctrl', onpress: () => toggleMod('ctrl') }));
+  rowSp.appendChild(makeKey('⌥', { cls: 'mod', mod: 'alt', onpress: () => toggleMod('alt') }));
+  rowSp.appendChild(makeKey('SPACE', { cls: 'space', onpress: () => pressKey('space','special') }));
+  rowSp.appendChild(makeKey('🎤', { cls: 'mic', id: 'mic-btn', onpress: toggleMic }));
+  rowSp.appendChild(makeKey('←', { cls: 'action', onpress: () => pressKey('left','special') }));
+  rowSp.appendChild(makeKey('→', { cls: 'action', onpress: () => pressKey('right','special') }));
+
+  // F-key row
+  for (let i = 1; i <= 12; i++) {
+    rowFn.appendChild(makeKey(`F${i}`, { cls: 'action', onpress: () => pressKey(`f${i}`, 'special') }));
+  }
+  rowFn.appendChild(makeKey('↑', { cls: 'action', onpress: () => pressKey('up','special') }));
+  rowFn.appendChild(makeKey('↓', { cls: 'action', onpress: () => pressKey('down','special') }));
+}
+
+function showLayer(layer) {
+  document.getElementById('row-fn').style.display = layer === 'fn' ? 'flex' : 'none';
+  document.getElementById('row-num').style.display = layer === 'main' ? 'flex' : 'none';
+  document.getElementById('tab-main').classList.toggle('active', layer === 'main');
+  document.getElementById('tab-fn').classList.toggle('active', layer === 'fn');
+}
+
+buildKeyboard();
+</script>
+</body>
+</html>
