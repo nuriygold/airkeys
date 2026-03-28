@@ -4,6 +4,10 @@
 
 AirKeys is a Progressive Web App (PWA) that runs in Safari on any iPad and sends keystrokes to your Mac over WebSocket. It includes a full QWERTY layout, modifier keys, voice input, and Claude-powered AI text suggestions — all in a single-port Python server you can tunnel over the internet in seconds.
 
+**Live demo:** [airkeys.vercel.app](https://airkeys.vercel.app) &nbsp;|&nbsp; **Source:** [github.com/nuriygold/airkeys](https://github.com/nuriygold/airkeys)
+
+> The Vercel deployment serves the static frontend UI. To use AirKeys as a keyboard, run the local Python server (see Setup below) and connect your iPad to it.
+
 ---
 
 ## Features
