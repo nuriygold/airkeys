@@ -1,0 +1,214 @@
+{
+  "name": "AirKeys Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "airkeys",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "airkeys-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond-summarize",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "summarize",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "switch-action",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-text",
+              "name": "prompt",
+              "value": "=Summarize the following text in 1-2 sentences:\\n\\n{{ $('Webhook').item.json.body.text }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-summarize-prompt",
+      "name": "Build Summarize Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-translate",
+              "name": "prompt",
+              "value": "=Translate the following text to Spanish. Reply with only the translation, no explanation:\\n\\n{{ $('Webhook').item.json.body.text }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-translate-prompt",
+      "name": "Build Translate Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-echo",
+              "name": "prompt",
+              "value": "={{ $('Webhook').item.json.body.text }} [received at {{ $now.toISO() }}]",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-echo",
+      "name": "Build Echo Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "openai-summarize",
+      "name": "AI — Summarize",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "openai-translate",
+      "name": "AI — Translate",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('AI — Summarize').item.json.message.content }) }}",
+        "options": {}
+      },
+      "id": "respond-summarize",
+      "name": "Respond — Summarize",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('AI — Translate').item.json.message.content }) }}",
+        "options": {}
+      },
+      "id": "respond-translate",
+      "name": "Respond — Translate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('Build Echo Response').item.json.prompt }) }}",
+        "options": {}
+      },
+      "id": "respond-echo",
+      "name": "Respond — Echo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 420]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Route by Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Build Summarize Prompt", "type": "main", "index": 0 }],
+        [{ "node": "Build Translate Prompt", "type": "main", "index": 0 }],
+        [{ "node": "Build Echo Response",    "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Summarize Prompt": {
+      "main": [
+        [{ "node": "AI — Summarize", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Translate Prompt": {
+      "main": [
+        [{ "node": "AI — Translate", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI — Summarize": {
+      "main": [
+        [{ "node": "Respond — Summarize", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI — Translate": {
+      "main": [
+        [{ "node": "Respond — Translate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Echo Response": {
+      "main": [
+        [{ "node": "Respond — Echo", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-28T00:00:00.000Z",
+  "versionId": "1"
+}

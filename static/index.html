@@ -182,6 +182,55 @@
     cursor: pointer;
   }
   .tab-btn.active { color: var(--accent); border-color: var(--accent); }
+
+  /* ── n8n response panel ── */
+  #n8n-response {
+    background: #0d1a14;
+    border: 1px solid #1a3a2a;
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #30d158;
+    display: none;
+    word-break: break-word;
+    animation: fadeSlideIn 0.25s ease;
+  }
+  #n8n-response.visible { display: block; }
+  #n8n-label {
+    font-size: 10px;
+    color: #1a8a3a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1a2e1a;
+    border: 1px solid #30d158;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: #30d158;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 100;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
@@ -195,6 +244,7 @@
   </div>
 
   <div id="suggestions"></div>
+  <div id="n8n-response"><div id="n8n-label">⚡ n8n response</div><span id="n8n-text"></span></div>
   <div id="preview"><span id="preview-text"></span></div>
 
   <div id="keyboard">
@@ -216,8 +266,10 @@
     <div class="tab-btn active" onclick="showLayer('main')" id="tab-main">ABC</div>
     <div class="tab-btn" onclick="showLayer('fn')" id="tab-fn">F1-12</div>
     <div class="tab-btn" onclick="clearPreview()" id="tab-clear">Clear</div>
+    <div class="tab-btn" onclick="sendN8n()" id="tab-n8n" style="color:#30d158;border-color:#1a3a2a;">⚡n8n</div>
   </div>
 </div>
+<div id="toast"></div>
 
 <script>
 // ── WebSocket ────────────────────────────────────────────────────────────────
@@ -242,6 +294,8 @@ function connect() {
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'suggestions') showSuggestions(msg.items || []);
+    else if (msg.type === 'n8n_status') showToast(msg.text || 'n8n workflow triggered…');
+    else if (msg.type === 'n8n_response') showN8nResponse(msg.text || '');
   };
 }
 connect();
@@ -266,7 +320,12 @@ function updatePreview() {
     suggestTimer = setTimeout(() => send({ type: 'suggest', text: buffer }), 600);
   }
 }
-function clearPreview() { buffer = ''; updatePreview(); clearSuggestions(); }
+function clearPreview() {
+  buffer = '';
+  updatePreview();
+  clearSuggestions();
+  document.getElementById('n8n-response').classList.remove('visible');
+}
 
 // ── Suggestions ──────────────────────────────────────────────────────────────
 function showSuggestions(items) {
@@ -430,6 +489,43 @@ function showLayer(layer) {
   document.getElementById('row-num').style.display = layer === 'main' ? 'flex' : 'none';
   document.getElementById('tab-main').classList.toggle('active', layer === 'main');
   document.getElementById('tab-fn').classList.toggle('active', layer === 'fn');
+}
+
+// ── n8n ──────────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function showN8nResponse(text) {
+  const panel = document.getElementById('n8n-response');
+  const span  = document.getElementById('n8n-text');
+  span.textContent = text;
+  panel.classList.add('visible');
+  // Also update the preview buffer so user can see what was typed
+  buffer = text;
+  updatePreview();
+}
+
+function sendN8n() {
+  const text = buffer.trim();
+  // If buffer already starts with a slash command, send it directly
+  if (text.startsWith('/n8n ') || text.startsWith('/summarize ') || text.startsWith('/translate ')) {
+    send({ type: 'text', value: text });
+    buffer = '';
+    updatePreview();
+  } else if (text) {
+    // Wrap plain text in /n8n
+    send({ type: 'text', value: '/n8n ' + text });
+    buffer = '';
+    updatePreview();
+  } else {
+    showToast('Type text, then tap ⚡n8n  —  or use /summarize /translate');
+  }
 }
 
 buildKeyboard();
