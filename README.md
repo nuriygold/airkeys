@@ -127,12 +127,3 @@ airkeys/
 
 ---
 
-## Built for LovHack
-
-AirKeys was built in under 24 hours for the **LovHack** hackathon. The goal: eliminate the friction of switching between an iPad and Mac keyboard during creative work.
-
----
-
-## License
-
-MIT
